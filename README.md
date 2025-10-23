@@ -2,8 +2,8 @@
 
 Interactive demo to explore the evolution of **point clouds** under a **multi-neuron semi-autonomous ReLU Neural ODE**, with **time-dependent hyperplanes**, **free / interpolation / classification** modes, and simple **separability** and **cross-entropy** metrics.
 
-**Live:** https://antonioalvarezl.github.io/relu-point-simulator/semi-autonomous
-**Code:** `index_semi.html`
+**Live:** https://antonioalvarezl.github.io/semi-autonomous
+**Code:** `index.html`
 **License:** MIT
 
 ## Inspiration
