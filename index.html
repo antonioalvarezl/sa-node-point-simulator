@@ -263,8 +263,9 @@
                 <div class="control-group">
                     <h3>Time Control</h3>
                     <div class="control-item">
-                        <label>Final Time (T) <span class="value-display" id="maxTimeValue">10.0s</span></label>
-                        <input type="range" id="maxTime" min="1" max="30" step="0.5" value="10" oninput="updateMaxTime()">
+                        <label>Final Time (T) <input type="number" class="param-input" min="1" max="100" step="0.5" value="10" 
+                               onchange="updateMaxTimeDirect(this.value)" id="maxTimeInput"></label>
+                        <input type="range" id="maxTime" min="1" max="10" step="0.5" value="10" oninput="updateMaxTime()">
                     </div>
                     <div class="button-group">
                         <button class="btn-primary" id="playBtn" onclick="togglePlay()">▶ Play</button>
@@ -278,8 +279,8 @@
                 
                 <div class="control-group">
                     <h3>Neurons (p = <span id="neuronCount">1</span>)</h3>
+                    <button class="btn-add" onclick="addNeuron()" style="margin-top: 0; margin-bottom: 10px;">+ Add New Neuron</button>
                     <div id="neuronsContainer"></div>
-                    <button class="btn-add" onclick="addNeuron()">+ Add New Neuron</button>
                 </div>
                 
                 <div class="control-group">
@@ -290,7 +291,7 @@
                     </div>
                     <div class="control-item">
                         <label>Vector Field Density <span class="value-display" id="vectorDensityValue">20</span></label>
-                        <input type="range" id="vectorDensity" min="10" max="40" step="1" value="20" oninput="updateVectorDensity()">
+                        <input type="range" id="vectorDensity" min="0" max="40" step="1" value="20" oninput="updateVectorDensity()">
                     </div>
                     <div class="control-item">
                         <label>Vector Field Opacity <span class="value-display" id="vectorOpacityValue">0.40</span></label>
@@ -763,7 +764,7 @@
                 drawHyperplane(toCanvas);
             }
             
-            if (state.showVectorField) {
+            if (state.showVectorField && state.vectorDensity > 0) {
                 const vectorAlpha = state.vectorOpacity;
                 
                 ctx.strokeStyle = `rgba(255, 99, 71, ${vectorAlpha})`;
@@ -1133,7 +1134,36 @@
         
         function updateMaxTime() {
             state.maxTime = parseFloat(document.getElementById('maxTime').value);
-            document.getElementById('maxTimeValue').textContent = state.maxTime.toFixed(1) + 's';
+            
+            // Sincronizar input numérico
+            const maxTimeInput = document.getElementById('maxTimeInput');
+            if (maxTimeInput) maxTimeInput.value = state.maxTime;
+            
+            // Actualizar el rango del slider de globalTime
+            const globalTimeSlider = document.getElementById('globalTime');
+            globalTimeSlider.max = state.maxTime;
+            
+            // Si el tiempo actual excede el nuevo máximo, ajustarlo
+            if (state.globalTime > state.maxTime) {
+                state.globalTime = state.maxTime;
+                globalTimeSlider.value = state.maxTime;
+                document.getElementById('globalTimeValue').textContent = state.globalTime.toFixed(2) + 's';
+            }
+            
+            draw();
+        }
+        
+        function updateMaxTimeDirect(value) {
+            const numValue = parseFloat(value);
+            if (isNaN(numValue) || numValue < 1) return;
+            
+            state.maxTime = numValue;
+            
+            // Sincronizar slider solo si está dentro del rango
+            const maxTimeSlider = document.getElementById('maxTime');
+            if (numValue <= 10) {
+                maxTimeSlider.value = numValue;
+            }
             
             // Actualizar el rango del slider de globalTime
             const globalTimeSlider = document.getElementById('globalTime');
@@ -1179,7 +1209,6 @@
             document.getElementById('globalTime').value = 0;
             document.getElementById('globalTimeValue').textContent = '0.00s';
             document.getElementById('playBtn').textContent = '▶ Play';
-            updateTimelineCursor();
             draw();
         }
         
