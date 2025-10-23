@@ -42,11 +42,15 @@ The hyperplane for neuron \(i\) is given by \(a_i^\top x + b_i t + c_i = 0\), wh
 
 - **Mode:** Free / Interpolation / Classification.  
 - **Population:** number of points (1–60); uniform or per-class Gaussian sampling.  
-- **Final Time (T):** adjustable time horizon from 1 to 30 seconds (default: 10s).
+- **Final Time (T):** adjustable time horizon with slider (1-10s) or manual input (1-100s).
 - **Neurons (p):** add/remove neurons; each neuron has sliders/inputs for \(w_1, w_2, a_1, a_2, b_i, c_i\).  
   - **Note:** \(b_i\) is always initialized to a non-zero value to ensure hyperplane movement.
 - **Global time:** slider \([0, T]\) with **Play/Pause** and **Reset**.  
-- **Visualization:** point size; vector-field density/opacity; activation hyperplanes \(a_i^\top x + b_i t + c_i = 0\) (active neuron shown darker/thicker).  
+- **Visualization:** 
+  - Point size
+  - Vector-field density (0-40, set to 0 to hide arrows completely)
+  - Vector-field opacity
+  - Activation hyperplanes \(a_i^\top x + b_i t + c_i = 0\) (active neuron shown darker/thicker)
 - **Interaction:** mouse wheel to zoom; drag to pan; **Shift+drag** to move points; save **PNG** or record a **WebM** of the evolution.
 
 The **metrics** panel shows:
@@ -83,9 +87,10 @@ In **classification by separability**, the final \(y\) coordinate is compared wi
 - **No sequential steps:** all \(p\) neurons act **simultaneously** at every time instant.
 - **Moving hyperplanes:** each hyperplane \(a_i^\top x + b_i t + c_i = 0\) evolves linearly in time with velocity \(b_i \neq 0\).
 - **Parameter \(c_i\):** initial offset for each hyperplane, in addition to the time-dependent term \(b_i t\).
-- **Adjustable time horizon:** evolution from 0 to \(T\) where \(T\) can be set between 1 and 30 seconds (default: 10s).
+- **Adjustable time horizon:** evolution from 0 to \(T\) where \(T\) can be set via slider (1-10s) or manual input (up to 100s).
 - **Fewer particles:** maximum 60 points (instead of 500) to maintain performance with multiple simultaneous neurons.
 - **Guaranteed movement:** all neurons are initialized with \(b_i \neq 0\) to ensure dynamic hyperplane motion.
+- **Vector field control:** density can be set to 0 to completely hide field arrows.
 
 ## Educational uses
 
@@ -102,7 +107,7 @@ Everything lives in one HTML file (UI + canvas + logic), using the 2D Canvas API
 If this demo supports your teaching or research, please cite:
 
 ```bibtex
-@misc{Li2025SemiAutonomousNODE,
+@misc{Li2024SemiAutonomousNODE,
   author       = {Li, Ziqian and Liu, Kang and Liverani, Lorenzo and Zuazua, Enrique},
   title        = {Universal Approximation of Dynamical Systems by Semi-Autonomous Neural ODEs and Applications},
   year         = {2024},
