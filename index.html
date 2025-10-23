@@ -1,0 +1,1432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neural ODE Simulator</title>
+    <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 1500px;
+            width: 100%;
+            padding: 30px;
+        }
+        .header { text-align: center; margin-bottom: 30px; }
+        h1 { color: #2d3748; font-size: 28px; margin-bottom: 10px; }
+        .subtitle { color: #2d3748; font-size: 16px; }
+        .formula { background: white; padding: 6px; border-radius: 3px; margin-top: 6px; font-size: 12px; }
+        .main-content { display: grid; grid-template-columns: 800px 1fr; gap: 30px; }
+        .canvas-container {
+            background: rgba(255, 165, 0, 0.02);
+            border-radius: 15px;
+            padding: 20px;
+            display: flex; flex-direction: column; align-items: center;
+            position: relative;
+        }
+        .fullscreen-controls {
+            display: none;
+            gap: 15px;
+            margin-top: 20px;
+        }
+        .fullscreen-btn {
+            padding: 12px 24px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .fullscreen-btn:hover {
+            background: #5a67d8;
+            transform: translateY(-2px);
+        }
+        .fullscreen-btn.secondary {
+            background: #48bb78;
+        }
+        .fullscreen-btn.secondary:hover {
+            background: #38a169;
+        }
+        .canvas-container:fullscreen {
+            background: #1a202c;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            overflow: auto;
+        }
+        .canvas-container:fullscreen canvas {
+            max-width: 90vw;
+            max-height: 70vh;
+            flex-shrink: 0;
+        }
+        .canvas-container:fullscreen .canvas-controls {
+            order: -1;
+            margin-bottom: 15px;
+        }
+        .canvas-container:fullscreen .fullscreen-controls {
+            display: flex;
+            margin-top: 15px;
+            flex-shrink: 0;
+        }
+        .canvas-controls { display: flex; gap: 8px; margin-bottom: 10px; }
+        .canvas-btn {
+            padding: 5px 10px; background: #4a5568; color: white; border: none; border-radius: 4px;
+            font-size: 10px; cursor: pointer; transition: all 0.3s;
+        }
+        .canvas-btn:hover { background: #2d3748; }
+        .canvas-btn.active { background: #667eea; }
+        .canvas-btn.recording { background: #f56565; animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.6} }
+        canvas { border: 1px solid rgba(0,0,0,0.1); border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); cursor: crosshair; }
+        input[type="number"] { padding: 4px 6px !important; font-size: 11px !important; }
+        .controls { background: #f7fafc; border-radius: 15px; padding: 12px; overflow-y: auto; max-height: 800px; }
+        .control-group { margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid #e2e8f0; }
+        .control-group:last-child { border-bottom: none; }
+        .control-group h3 { color: #4a5568; font-size: 11px; font-weight: 600; margin-bottom: 8px; text-transform: uppercase; letter-spacing: .5px; }
+        .control-item { margin-bottom: 8px; }
+        .control-row { display: flex; gap: 8px; margin-bottom: 8px; }
+        .control-row .control-item { flex: 1; margin-bottom: 0; }
+        .control-row input[type="number"], .control-row select { width: 100%; }
+        label { display: block; color: #718096; font-size: 10px; margin-bottom: 2px; font-weight: 500; }
+        input[type="range"] { width: 100%; height: 4px; border-radius: 2px; background: #cbd5e0; outline: none; -webkit-appearance: none; }
+        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #667eea; cursor: pointer; }
+        input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: #667eea; cursor: pointer; border: none; }
+        .value-display { display: inline-block; background: white; padding: 1px 6px; border-radius: 3px; font-size: 10px; font-weight: 600; color: #4a5568; min-width: 35px; text-align: center; margin-left: 6px; }
+        select {
+            width: 100%; padding: 6px 10px; border: 1px solid #cbd5e0; border-radius: 5px; background: white; color: #4a5568; font-size: 12px; cursor: pointer;
+        }
+        .button-group { display: flex; gap: 8px; margin-top: 10px; }
+        button { flex: 1; padding: 6px 12px; border: none; border-radius: 5px; font-size: 11px; font-weight: 600; cursor: pointer; transition: all 0.3s; }
+        .btn-primary { background: #667eea; color: white; }
+        .btn-primary:hover { background: #5a67d8; }
+        .btn-secondary { background: #48bb78; color: white; }
+        .btn-secondary:hover { background: #38a169; }
+        .btn-danger { background: #f56565; color: white; padding: 4px 8px; font-size: 10px; }
+        .btn-danger:hover { background: #e53e3e; }
+        .btn-add { background: #4299e1; color: white; width: 100%; margin-top: 10px; }
+        .btn-add:hover { background: #3182ce; }
+        .step-container { background: white; border: 1px solid #e2e8f0; border-radius: 5px; padding: 8px; position: relative; }
+        .step-tabs { display: flex; gap: 4px; margin-bottom: 8px; flex-wrap: wrap; }
+        .step-tab { 
+            padding: 4px 8px; background: #e2e8f0; color: #4a5568; border: none; 
+            border-radius: 4px; font-size: 10px; cursor: pointer; transition: all 0.2s; 
+        }
+        .step-tab.active { background: #667eea; color: white; }
+        .step-tab:hover { background: #cbd5e0; }
+        .step-tab.active:hover { background: #5a67d8; }
+        .step-content { display: none; }
+        .step-content.active { display: block; }
+        .step-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .step-title { font-weight: 600; color: #2d3748; font-size: 11px; }
+        .step-controls { display: flex; flex-direction: column; gap: 6px; }
+        .timeline { background: #edf2f7; border-radius: 5px; padding: 6px; margin-bottom: 8px; }
+        .timeline-bar { height: 30px; background: white; border-radius: 3px; position: relative; overflow: hidden; cursor: pointer; }
+        .timeline-segment {
+            position: absolute; height: 100%; display: flex; align-items: center; justify-content: center; color: white; font-size: 10px; font-weight: 600;
+            border-right: 1px solid rgba(255,255,255,0.3); transition: opacity 0.3s;
+        }
+        .timeline-segment:hover { opacity: 0.8; }
+        .timeline-cursor { position: absolute; width: 3px; height: 100%; background: rgba(0, 0, 0, 0.7); pointer-events: none; z-index: 10; }
+        .dimension-selector { background: #edf2f7; padding: 10px; border-radius: 8px; margin-bottom: 20px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+        .dim-button { padding: 8px 20px; border: 2px solid #cbd5e0; background: white; border-radius: 6px; cursor: pointer; transition: all 0.3s; font-weight: 600; }
+        .dim-button.active { background: #667eea; color: white; border-color: #667eea; }
+        .hidden { display: none !important; }
+        .param-input { width: 60px; padding: 2px 4px; border: 1px solid #cbd5e0; border-radius: 3px; background: white; color: #4a5568; font-size: 10px; margin-left: 6px; text-align: center; }
+        .control-item label { display: flex; align-items: center; justify-content: space-between; }
+        .metric-display { background: #edf2f7; border-radius: 6px; padding: 8px; margin-top: 8px; font-size: 11px; color: #4a5568; }
+        .metric-value { font-weight: 600; color: #2d3748; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Semi-autonomous Neural ODE Simulator</h1>
+            <div class="subtitle">
+                <div class="formula">$$x'(t) = \sum_{i=1}^{p} w_i \, \big(a_i^\top x(t) + b_i t + c_i\big)_+$$</div>
+            </div>
+            <div style="font-size: 11px; color: #a0a0a0; margin-top: 5px;">
+                Created by A. Álvarez-López • 2025
+            </div>
+        </div>
+        
+        <div class="dimension-selector">
+            <span style="font-weight: 600; color: #4a5568;">Mode:</span>
+            <button class="dim-button" id="modeFree" onclick="setMode('free')">Free</button>
+            <button class="dim-button" id="modeInterp" onclick="setMode('interpolation')">Interpolation</button>
+            <button class="dim-button active" id="modeClass" onclick="setMode('classification')">Classification</button>
+        </div>
+        
+        <div class="main-content">
+            <div class="canvas-container">
+                <div style="text-align: center; margin-bottom: 8px; font-size: 10px; color: #718096;">
+                    Shift+click to set hyperplane or drag points • Drag to pan • Scroll to zoom 
+                </div>
+                <div class="metric-display" id="metricDisplay" style="margin-bottom: 8px;"></div>
+                <div class="canvas-controls">
+                    <button class="canvas-btn active" id="toggleVisBtn" onclick="toggleVisualization()">
+                        👁 Hide Overlays
+                    </button>
+                    <button class="canvas-btn" id="saveImageBtn" onclick="saveImage()">
+                        📷 Save Image
+                    </button>
+                    <button class="canvas-btn" id="recordBtn" onclick="toggleRecording()">
+                        🎥 Record Video
+                    </button>
+                    <button class="canvas-btn" id="fullscreenBtn" onclick="toggleFullscreen()">
+                        ⛶ Fullscreen
+                    </button>
+                </div>
+                <canvas id="flowCanvas" width="800" height="800"></canvas>
+                <div class="fullscreen-controls">
+                    <button class="fullscreen-btn" onclick="togglePlay()">▶ Play / Pause</button>
+                    <button class="fullscreen-btn secondary" onclick="reset()">↺ Reset</button>
+                </div>
+            </div>
+            
+            <div class="controls">
+                <div class="control-group" id="modeSettings">
+                    <h3>Mode Settings</h3>
+                    <div class="control-row">
+                        <div class="control-item">
+                            <label>Points</label>
+                            <input type="number" id="numParticles" min="1" max="60" step="1" value="30">
+                        </div>
+                    </div>
+                    
+                    <div id="freeSettings" class="hidden">
+                        <div class="control-item">
+                            <label>Distribution</label>
+                            <select id="freeDistribution">
+                                <option value="uniform">Uniform [0,1]²</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div id="interpSettings" class="hidden">
+                        <div class="control-item">
+                            <label>Distribution</label>
+                            <select id="interpDistribution">
+                                <option value="uniform">Uniform [0,1]²</option>
+                            </select>
+                        </div>
+                        <div class="control-item">
+                            <label><input type="checkbox" id="labeledCheck" onchange="updateLabeled()"> Labeled Mode</label>
+                        </div>
+                    </div>
+                    
+                    <div id="classSettings">
+                        <div class="control-row">
+                            <div class="control-item">
+                                <label>Classes (M)</label>
+                                <select id="numClasses" onchange="updateClassification()">
+                                    <option value="2" selected>2</option>
+                                    <option value="3">3</option>
+                                </select>
+                            </div>
+                            <div class="control-item">
+                                <label>Distribution</label>
+                                <select id="classDistribution" onchange="updateClassification()">
+                                    <option value="uniform">Uniform</option>
+                                    <option value="gaussian">Gaussian</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="control-item">
+                            <label>Mode</label>
+                            <select id="classMode" onchange="updateClassMode()">
+                                <option value="separability" selected>Separability</option>
+                                <option value="crossentropy">Cross-Entropy</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <button class="btn-secondary" onclick="resample()">↻ Resample</button>
+                </div>
+                
+                <div class="control-group">
+                    <h3>Time Control</h3>
+                    <div class="button-group">
+                        <button class="btn-primary" id="playBtn" onclick="togglePlay()">▶ Play</button>
+                        <button class="btn-secondary" id="resetBtn" onclick="reset()">↺ Reset</button>
+                    </div>
+                    <div class="control-item">
+                        <label>Global Time <span class="value-display" id="globalTimeValue">0.00s</span></label>
+                        <input type="range" id="globalTime" min="0" max="10" step="0.1" value="0" oninput="updateGlobalTime()">
+                    </div>
+                </div>
+                
+                <div class="control-group">
+                    <h3>Neurons (p = <span id="neuronCount">1</span>)</h3>
+                    <div id="neuronsContainer"></div>
+                    <button class="btn-add" onclick="addNeuron()">+ Add New Neuron</button>
+                </div>
+                
+                <div class="control-group">
+                    <h3>Visualization Settings</h3>
+                    <div class="control-item">
+                        <label>Point Size <span class="value-display" id="pointSizeValue">6</span></label>
+                        <input type="range" id="pointSize" min="3" max="15" step="1" value="6" oninput="updatePointSize()">
+                    </div>
+                    <div class="control-item">
+                        <label>Vector Field Density <span class="value-display" id="vectorDensityValue">20</span></label>
+                        <input type="range" id="vectorDensity" min="10" max="40" step="1" value="20" oninput="updateVectorDensity()">
+                    </div>
+                    <div class="control-item">
+                        <label>Vector Field Opacity <span class="value-display" id="vectorOpacityValue">0.40</span></label>
+                        <input type="range" id="vectorOpacity" min="0" max="1" step="0.05" value="0.4" oninput="updateVectorOpacity()">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('flowCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        const CLASS_COLORS = [
+            { name: 'Pink', color: '#EF8BA4' },      // Rosa para clase 0 (banda inferior)
+            { name: 'Green', color: '#AFE748' },     // Verde para clase 1 (banda central)
+            { name: 'Blue', color: '#78A4F8' }       // Azul claro para clase 2 (banda superior)
+        ];
+        
+        const BAND_COLORS = [
+            '#801D1A',  // Rojo oscuro para banda inferior (menor y) - índice 0
+            '#607A3A',  // Verde oliva para banda central - índice 1
+            '#2B56A1'   // Azul oscuro para banda superior (mayor y) - índice 2
+        ];
+        
+        // Paired colormap de matplotlib - 12 colores distintos
+        const LABEL_COLORS = [
+            'rgb(166, 206, 227)', 'rgb(31, 120, 180)', 'rgb(178, 223, 138)', 'rgb(51, 160, 44)',
+            'rgb(251, 154, 153)', 'rgb(227, 26, 28)', 'rgb(253, 191, 111)', 'rgb(255, 127, 0)',
+            'rgb(202, 178, 214)', 'rgb(106, 61, 154)', 'rgb(255, 255, 153)', 'rgb(177, 89, 40)'
+        ];
+        
+        const SHAPES = ['circle', 'square', 'triangle', 'diamond', 'pentagon', 'hexagon', 'star', 'cross'];
+        
+        // Umbral para empezar a mostrar números
+        const LABEL_NUMBER_THRESHOLD = 20;
+        
+        let state = {
+            mode: 'classification',
+            numParticles: 30,
+            labeled: false,
+            numClasses: 2,
+            classMode: 'separability',
+            classDistribution: 'uniform',
+            neurons: [{ w: [1, 0], a: [0, 1], b: 0.0, c: 0.0 }],
+            globalTime: 0,
+            numNeurons: 1,
+            pointSize: 6,
+            vectorDensity: 20,
+            vectorOpacity: 0.4,
+            isPlaying: false,
+            particles: [],
+            targets: [],
+            zoom: 1,
+            panX: 0,
+            panY: 0,
+            isPanning: false,
+            lastMouseX: 0,
+            lastMouseY: 0,
+            isSettingB: false,
+            showHyperplane: true,
+            showVectorField: true,
+            mouseDown: false,
+            isRecording: false,
+            mediaRecorder: null,
+            recordedChunks: [],
+            activeNeuron: 0,
+            randomSeed: Math.random(),
+            draggedParticleIndex: -1
+        };
+        
+        function relu(x) {
+            return Math.max(0, x);
+        }
+        
+        function dot(v1, v2) {
+            return v1[0] * v2[0] + v1[1] * v2[1];
+        }
+        
+        function setMode(mode) {
+            state.mode = mode;
+            document.getElementById('modeFree').classList.toggle('active', mode === 'free');
+            document.getElementById('modeInterp').classList.toggle('active', mode === 'interpolation');
+            document.getElementById('modeClass').classList.toggle('active', mode === 'classification');
+            
+            document.getElementById('freeSettings').classList.toggle('hidden', mode !== 'free');
+            document.getElementById('interpSettings').classList.toggle('hidden', mode !== 'interpolation');
+            document.getElementById('classSettings').classList.toggle('hidden', mode !== 'classification');
+            
+            generateParticles();
+            draw();
+        }
+        
+        function updateLabeled() {
+            state.labeled = document.getElementById('labeledCheck').checked;
+            generateParticles();
+            draw();
+        }
+        
+        function updateClassification() {
+            state.numClasses = parseInt(document.getElementById('numClasses').value);
+            state.classDistribution = document.getElementById('classDistribution').value;
+            generateParticles();
+            draw();
+        }
+        
+        function updateClassMode() {
+            state.classMode = document.getElementById('classMode').value;
+            draw();
+        }
+        
+        function seededRandom(seed) {
+            const x = Math.sin(seed++) * 10000;
+            return x - Math.floor(x);
+        }
+        
+        function resample() {
+            state.randomSeed = Math.random(); // Nueva seed al hacer resample explícito
+            generateParticles();
+        }
+        
+        function generateParticles() {
+            const n = parseInt(document.getElementById('numParticles').value);
+            state.numParticles = n;
+            state.particles = [];
+            state.targets = [];
+            
+            let seed = state.randomSeed * 100000;
+            
+            if (state.mode === 'free') {
+                for (let i = 0; i < n; i++) {
+                    const x = seededRandom(seed++);
+                    const y = seededRandom(seed++);
+                    state.particles.push({ x, y, class: 0, label: 0, shape: 'circle' });
+                }
+            } else if (state.mode === 'interpolation') {
+                for (let i = 0; i < n; i++) {
+                    const x = seededRandom(seed++);
+                    const y = seededRandom(seed++);
+                    const label = state.labeled ? i : 0;
+                    const colorIndex = i % LABEL_COLORS.length;
+                    const shapeIndex = Math.floor(i / LABEL_COLORS.length) % SHAPES.length;
+                    const shape = state.labeled ? SHAPES[shapeIndex] : 'circle';
+                    state.particles.push({ x, y, class: 0, label, shape });
+                    
+                    const tx = seededRandom(seed++);
+                    const ty = seededRandom(seed++);
+                    state.targets.push({ x: tx, y: ty, label, shape });
+                }
+            } else if (state.mode === 'classification') {
+                const M = state.numClasses;
+                const perClass = Math.floor(n / M);
+                const remainder = n % M;
+                
+                let idx = 0;
+                for (let c = 0; c < M; c++) {
+                    const count = perClass + (c < remainder ? 1 : 0);
+                    
+                    for (let i = 0; i < count; i++) {
+                        let x, y;
+                        
+                        if (state.classDistribution === 'gaussian') {
+                            const meanX = 0.3 + (c / M) * 0.4;
+                            const meanY = 0.3 + (c / M) * 0.4;
+                            const u1 = seededRandom(seed++);
+                            const u2 = seededRandom(seed++);
+                            const z1 = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+                            const z2 = Math.sqrt(-2 * Math.log(u1)) * Math.sin(2 * Math.PI * u2);
+                            
+                            x = meanX + z1 * 0.15;
+                            y = meanY + z2 * 0.15;
+                            
+                            x = Math.max(0, Math.min(1, x));
+                            y = Math.max(0, Math.min(1, y));
+                        } else {
+                            x = seededRandom(seed++);
+                            y = seededRandom(seed++);
+                        }
+                        
+                        state.particles.push({ x, y, class: c, label: idx++, shape: 'circle' });
+                    }
+                }
+            }
+            
+            draw();
+        }
+        
+        function evolveParticle(x0, y0, t_end) {
+            const numSteps = 100;
+            const dt = t_end / numSteps;
+            
+            let currentX = x0;
+            let currentY = y0;
+            
+            for (let i = 0; i < numSteps; i++) {
+                const t = i * dt;
+                let vx = 0;
+                let vy = 0;
+                
+                // Sumar contribución de todas las neuronas
+                for (const neuron of state.neurons) {
+                    const inner = neuron.a[0] * currentX + neuron.a[1] * currentY + neuron.b * t + neuron.c;
+                    const activation = Math.max(0, inner);
+                    
+                    vx += neuron.w[0] * activation;
+                    vy += neuron.w[1] * activation;
+                }
+                
+                currentX += vx * dt;
+                currentY += vy * dt;
+            }
+            
+            return { x: currentX, y: currentY };
+        }
+        
+        function getEvolvedParticles() {
+            const evolved = [];
+            
+            for (const particle of state.particles) {
+                const e = evolveParticle(particle.x, particle.y, state.globalTime);
+                evolved.push({ 
+                    x: e.x, 
+                    y: e.y, 
+                    class: particle.class, 
+                    label: particle.label, 
+                    shape: particle.shape 
+                });
+            }
+            
+            return evolved;
+        }
+
+        
+        function vectorField(x, y) {
+            const t = state.globalTime;
+            let vx = 0;
+            let vy = 0;
+            
+            // Sumar contribución de todas las neuronas
+            for (const neuron of state.neurons) {
+                const coords = [x, y];
+                
+                // Calcular a_i^T * x + b_i * t + c_i
+                const inner = neuron.a[0] * coords[0] + neuron.a[1] * coords[1] + neuron.b * t + neuron.c;
+                
+                // Aplicar ReLU
+                const activation = Math.max(0, inner);
+                
+                // Acumular w_i * (a_i^T * x + b_i * t + c_i)_+
+                vx += neuron.w[0] * activation;
+                vy += neuron.w[1] * activation;
+            }
+            
+            return [vx, vy];
+        }
+        
+        function calculateMetrics() {
+            const evolved = getEvolvedParticles();
+            let html = '';
+            
+            if (state.mode === 'interpolation') {
+                let totalDist = 0;
+                for (let i = 0; i < evolved.length; i++) {
+                    const dx = evolved[i].x - state.targets[i].x;
+                    const dy = evolved[i].y - state.targets[i].y;
+                    totalDist += Math.sqrt(dx*dx + dy*dy);
+                }
+                const avgDist = totalDist / evolved.length;
+                html = `<strong>Average Distance to Targets:</strong> <span class="metric-value">${avgDist.toFixed(4)}</span>`;
+            } else if (state.mode === 'classification') {
+                if (state.classMode === 'separability') {
+                    const M = state.numClasses;
+                    const bands = getClassificationBands(M);
+                    let correct = 0;
+                    
+                    for (const p of evolved) {
+                        const targetBand = bands[p.class];
+                        if (p.y >= targetBand.min && p.y < targetBand.max) {
+                            correct++;
+                        }
+                    }
+                    
+                    const accuracy = (correct / evolved.length) * 100;
+                    html = `<strong>Separability Accuracy:</strong> <span class="metric-value">${accuracy.toFixed(1)}%</span> (${correct}/${evolved.length})`;
+                } else {
+                    const crossEntropy = calculateCrossEntropy(evolved);
+                    html = `<strong>Cross-Entropy Loss:</strong> <span class="metric-value">${crossEntropy.toFixed(4)}</span>`;
+                }
+            }
+            
+            document.getElementById('metricDisplay').innerHTML = html;
+        }
+        
+        function getClassificationBands(M) {
+            if (M === 2) {
+                return [
+                    { min: -Infinity, max: 0.5 },
+                    { min: 0.5, max: Infinity }
+                ];
+            } else if (M === 3) {
+                return [
+                    { min: -Infinity, max: 1/3 },
+                    { min: 1/3, max: 2/3 },
+                    { min: 2/3, max: Infinity }
+                ];
+            }
+        }
+        
+        function calculateCrossEntropy(evolved) {
+            const M = state.numClasses;
+            let totalLoss = 0;
+            
+            for (const p of evolved) {
+                const logits = new Array(M).fill(0);
+                
+                for (let c = 0; c < M; c++) {
+                    const centerY = (c + 0.5) / M;
+                    logits[c] = -Math.abs(p.y - centerY) * 10;
+                }
+                
+                const maxLogit = Math.max(...logits);
+                const expSum = logits.reduce((sum, l) => sum + Math.exp(l - maxLogit), 0);
+                const logSoftmax = logits[p.class] - maxLogit - Math.log(expSum);
+                totalLoss -= logSoftmax;
+            }
+            
+            return totalLoss / evolved.length;
+        }
+        
+        function draw() {
+            // Fondo blanco
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            const scale = 600 * state.zoom;
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            
+            function toCanvas(x, y) {
+                return [
+                    centerX + (x + state.panX) * scale,
+                    centerY - (y + state.panY) * scale
+                ];
+            }
+            
+            // Dibujar bandas de clasificación PRIMERO (fondo)
+            if (state.mode === 'classification' && state.classMode === 'separability') {
+                const M = state.numClasses;
+                const bands = getClassificationBands(M);
+                
+                for (let c = 0; c < M; c++) {
+                    const bandMin = bands[c].min === -Infinity ? -100 : bands[c].min;
+                    const bandMax = bands[c].max === Infinity ? 100 : bands[c].max;
+                    
+                    const [, y1] = toCanvas(0, bandMin);
+                    const [, y2] = toCanvas(0, bandMax);
+                    
+                    // Para M=2: banda 0 (inferior) usa rojo, banda 1 (superior) usa azul
+                    // Para M=3: banda 0 (inferior) usa rojo, banda 1 (central) usa verde, banda 2 (superior) usa azul
+                    let colorIndex = c;
+                    if (M === 2 && c === 1) {
+                        colorIndex = 2; // Usar azul para la banda superior cuando M=2
+                    }
+                    
+                    ctx.fillStyle = BAND_COLORS[colorIndex];
+                    ctx.fillRect(0, Math.min(y1, y2), canvas.width, Math.abs(y2 - y1));
+                }
+            }
+            
+            // Dibujar regiones grises donde a_i*x + b_i*t + c_i < 0 para cada neurona
+            if (state.showHyperplane) {
+                const t = state.globalTime;
+                
+                for (const neuron of state.neurons) {
+                    ctx.fillStyle = 'rgba(40, 40, 40, 0.35)';
+                    
+                    // Necesitamos rellenar la región donde a_i*x + b_i*t + c_i < 0
+                    
+                    if (Math.abs(neuron.a[0]) > 1e-10 || Math.abs(neuron.a[1]) > 1e-10) {
+                        ctx.beginPath();
+                        
+                        // Crear un polígono que cubra la región negativa
+                        const corners = [
+                            [-1000, -1000], [1000, -1000], [1000, 1000], [-1000, 1000]
+                        ];
+                        
+                        // Encontrar qué esquinas están en el lado negativo
+                        const negativeCorners = corners.filter(([x, y]) => 
+                            neuron.a[0] * x + neuron.a[1] * y + neuron.b * t + neuron.c < 0
+                        );
+                        
+                        if (negativeCorners.length > 0) {
+                            // Dibujar polígono
+                            const points = [];
+                            
+                            // Agregar esquinas negativas
+                            for (const [x, y] of negativeCorners) {
+                                points.push(toCanvas(x, y));
+                            }
+                            
+                            // Agregar intersecciones con bordes
+                            const edges = [
+                                [[-1000, -1000], [1000, -1000]],
+                                [[1000, -1000], [1000, 1000]],
+                                [[1000, 1000], [-1000, 1000]],
+                                [[-1000, 1000], [-1000, -1000]]
+                            ];
+                            
+                            for (const [[x1, y1], [x2, y2]] of edges) {
+                                const val1 = neuron.a[0] * x1 + neuron.a[1] * y1 + neuron.b * t + neuron.c;
+                                const val2 = neuron.a[0] * x2 + neuron.a[1] * y2 + neuron.b * t + neuron.c;
+                                
+                                if (val1 * val2 < 0) {
+                                    const t_intersect = -val1 / (val2 - val1);
+                                    const xi = x1 + t_intersect * (x2 - x1);
+                                    const yi = y1 + t_intersect * (y2 - y1);
+                                    points.push(toCanvas(xi, yi));
+                                }
+                            }
+                            
+                            if (points.length >= 3) {
+                                ctx.beginPath();
+                                ctx.moveTo(points[0][0], points[0][1]);
+                                for (let i = 1; i < points.length; i++) {
+                                    ctx.lineTo(points[i][0], points[i][1]);
+                                }
+                                ctx.closePath();
+                                ctx.fill();
+                            }
+                        }
+                    }
+                }
+            }
+            
+            if (state.mode === 'interpolation') {
+                for (const target of state.targets) {
+                    const [cx, cy] = toCanvas(target.x, target.y);
+                    const color = state.labeled ? getLabelColor(target.label) : 'rgba(255, 100, 100, 0.7)';
+                    const showNum = state.labeled && state.numParticles > LABEL_NUMBER_THRESHOLD;
+                    drawShape(ctx, cx, cy, state.pointSize + 4, state.labeled ? target.shape : 'triangle', color, false, showNum, target.label + 1);
+                }
+            }
+            
+            const evolved = getEvolvedParticles();
+            for (const p of evolved) {
+                const [cx, cy] = toCanvas(p.x, p.y);
+                let color;
+                
+                if (state.mode === 'classification') {
+                    // Para M=2: clase 0 (inferior) usa rosa, clase 1 (superior) usa azul claro
+                    // Para M=3: clase 0 (inferior) usa rosa, clase 1 (central) usa verde, clase 2 (superior) usa azul claro
+                    let colorIndex = p.class;
+                    if (state.numClasses === 2 && p.class === 1) {
+                        colorIndex = 2; // Usar azul claro para la clase superior cuando M=2
+                    }
+                    color = CLASS_COLORS[colorIndex].color;
+                } else if (state.mode === 'interpolation' && state.labeled) {
+                    color = getLabelColor(p.label);
+                } else {
+                    color = 'rgba(102, 126, 234, 0.8)';
+                }
+                
+                const showNum = state.mode === 'interpolation' && state.labeled && state.numParticles > LABEL_NUMBER_THRESHOLD;
+                drawShape(ctx, cx, cy, state.pointSize, state.labeled && state.mode === 'interpolation' ? p.shape : 'circle', color, true, showNum, p.label + 1);
+            }
+            
+            if (state.showHyperplane) {
+                drawHyperplane(toCanvas);
+            }
+            
+            if (state.showVectorField) {
+                const vectorAlpha = state.vectorOpacity;
+                
+                ctx.strokeStyle = `rgba(255, 99, 71, ${vectorAlpha})`;
+                ctx.fillStyle = `rgba(255, 99, 71, ${vectorAlpha})`;
+                ctx.lineWidth = 1.5;
+                
+                const viewRange = 2.5 / state.zoom;
+                const xMinWorld = -viewRange - state.panX;
+                const xMaxWorld = viewRange - state.panX;
+                const yMinWorld = -viewRange - state.panY;
+                const yMaxWorld = viewRange - state.panY;
+                
+                const spacing = state.vectorDensity;
+                for (let i = 0; i <= spacing; i++) {
+                    for (let j = 0; j <= spacing; j++) {
+                        const x = xMinWorld + (i / spacing) * (xMaxWorld - xMinWorld);
+                        const y = yMaxWorld - (j / spacing) * (yMaxWorld - yMinWorld);
+                        const [vx, vy] = vectorField(x, y);
+                        
+                        if (vx * vx + vy * vy > 0.0001) {
+                            const [cx, cy] = toCanvas(x, y);
+                            const vnorm = Math.sqrt(vx * vx + vy * vy);
+                            const scale_arrow = Math.min(20, 15 / Math.sqrt(vnorm + 0.1));
+                            const [cx2, cy2] = toCanvas(
+                                x + vx * scale_arrow / scale,
+                                y + vy * scale_arrow / scale
+                            );
+                            
+                            ctx.beginPath();
+                            ctx.moveTo(cx, cy);
+                            ctx.lineTo(cx2, cy2);
+                            ctx.stroke();
+                            
+                            const angle = Math.atan2(cy - cy2, cx - cx2);
+                            const headlen = 5;
+                            ctx.beginPath();
+                            ctx.moveTo(cx2, cy2);
+                            ctx.lineTo(cx2 + headlen * Math.cos(angle + Math.PI/6),
+                                      cy2 + headlen * Math.sin(angle + Math.PI/6));
+                            ctx.moveTo(cx2, cy2);
+                            ctx.lineTo(cx2 + headlen * Math.cos(angle - Math.PI/6),
+                                      cy2 + headlen * Math.sin(angle - Math.PI/6));
+                            ctx.stroke();
+                        }
+                    }
+                }
+            }
+            
+            calculateMetrics();
+        }
+        
+        function getLabelColor(label) {
+            if (label < LABEL_COLORS.length) {
+                return LABEL_COLORS[label];
+            }
+            // Si se acaban los colores, generar uno basado en hue
+            const hue = (label * 67) % 360;
+            return `hsl(${hue}, 70%, 60%)`;
+        }
+        
+        function drawShape(ctx, x, y, size, shape, color, filled = true, showNumber = false, number = 0) {
+            ctx.fillStyle = color;
+            ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)';
+            ctx.lineWidth = 1;
+            
+            if (shape === 'circle') {
+                ctx.beginPath();
+                ctx.arc(x, y, size, 0, 2 * Math.PI);
+                if (filled) ctx.fill();
+                ctx.stroke();
+            } else if (shape === 'square') {
+                ctx.beginPath();
+                ctx.rect(x - size, y - size, size * 2, size * 2);
+                if (filled) ctx.fill();
+                ctx.stroke();
+            } else if (shape === 'triangle') {
+                ctx.beginPath();
+                ctx.moveTo(x, y - size);
+                ctx.lineTo(x - size * 0.866, y + size * 0.5);
+                ctx.lineTo(x + size * 0.866, y + size * 0.5);
+                ctx.closePath();
+                if (filled) ctx.fill();
+                ctx.stroke();
+            } else if (shape === 'diamond') {
+                ctx.beginPath();
+                ctx.moveTo(x, y - size);
+                ctx.lineTo(x + size, y);
+                ctx.lineTo(x, y + size);
+                ctx.lineTo(x - size, y);
+                ctx.closePath();
+                if (filled) ctx.fill();
+                ctx.stroke();
+            } else if (shape === 'pentagon') {
+                ctx.beginPath();
+                for (let i = 0; i < 5; i++) {
+                    const angle = (i * 2 * Math.PI / 5) - Math.PI / 2;
+                    const px = x + size * Math.cos(angle);
+                    const py = y + size * Math.sin(angle);
+                    if (i === 0) ctx.moveTo(px, py);
+                    else ctx.lineTo(px, py);
+                }
+                ctx.closePath();
+                if (filled) ctx.fill();
+                ctx.stroke();
+            } else if (shape === 'hexagon') {
+                ctx.beginPath();
+                for (let i = 0; i < 6; i++) {
+                    const angle = i * Math.PI / 3;
+                    const px = x + size * Math.cos(angle);
+                    const py = y + size * Math.sin(angle);
+                    if (i === 0) ctx.moveTo(px, py);
+                    else ctx.lineTo(px, py);
+                }
+                ctx.closePath();
+                if (filled) ctx.fill();
+                ctx.stroke();
+            } else if (shape === 'star') {
+                ctx.beginPath();
+                for (let i = 0; i < 10; i++) {
+                    const angle = (i * Math.PI / 5) - Math.PI / 2;
+                    const r = i % 2 === 0 ? size : size * 0.5;
+                    const px = x + r * Math.cos(angle);
+                    const py = y + r * Math.sin(angle);
+                    if (i === 0) ctx.moveTo(px, py);
+                    else ctx.lineTo(px, py);
+                }
+                ctx.closePath();
+                if (filled) ctx.fill();
+                ctx.stroke();
+            } else if (shape === 'cross') {
+                const w = size * 0.4;
+                ctx.beginPath();
+                ctx.moveTo(x - w, y - size);
+                ctx.lineTo(x + w, y - size);
+                ctx.lineTo(x + w, y - w);
+                ctx.lineTo(x + size, y - w);
+                ctx.lineTo(x + size, y + w);
+                ctx.lineTo(x + w, y + w);
+                ctx.lineTo(x + w, y + size);
+                ctx.lineTo(x - w, y + size);
+                ctx.lineTo(x - w, y + w);
+                ctx.lineTo(x - size, y + w);
+                ctx.lineTo(x - size, y - w);
+                ctx.lineTo(x - w, y - w);
+                ctx.closePath();
+                if (filled) ctx.fill();
+                ctx.stroke();
+            }
+            
+            // Dibujar número si es necesario
+            if (showNumber) {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.9)';
+                ctx.font = 'bold 9px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(number.toString(), x, y + size + 8);
+            }
+        }
+        
+        function drawHyperplane(toCanvas) {
+            const t = state.globalTime;
+            
+            // Dibujar hiperplanos de todas las neuronas
+            for (let i = 0; i < state.neurons.length; i++) {
+                const neuron = state.neurons[i];
+                
+                // Color diferente para la neurona activa
+                if (i === state.activeNeuron) {
+                    ctx.strokeStyle = 'rgba(0, 0, 0, 0.9)';
+                    ctx.lineWidth = 3;
+                } else {
+                    ctx.strokeStyle = 'rgba(0, 0, 0, 0.4)';
+                    ctx.lineWidth = 2;
+                }
+                
+                ctx.setLineDash([8, 4]);
+                ctx.beginPath();
+                
+                // Hiperplano: a_i^T x + b_i*t + c_i = 0
+                const b_eff = neuron.b * t + neuron.c;
+                
+                if (Math.abs(neuron.a[1]) > 1e-10) {
+                    const x1 = -1000, x2 = 1000;
+                    const y1 = -(neuron.a[0] * x1 + b_eff) / neuron.a[1];
+                    const y2 = -(neuron.a[0] * x2 + b_eff) / neuron.a[1];
+                    
+                    const [cx1, cy1] = toCanvas(x1, y1);
+                    const [cx2, cy2] = toCanvas(x2, y2);
+                    
+                    ctx.moveTo(cx1, cy1);
+                    ctx.lineTo(cx2, cy2);
+                } else if (Math.abs(neuron.a[0]) > 1e-10) {
+                    const x = -b_eff / neuron.a[0];
+                    const [cx] = toCanvas(x, -1000);
+                    const [cx2] = toCanvas(x, 1000);
+                    ctx.moveTo(cx, 0);
+                    ctx.lineTo(cx2, canvas.height);
+                }
+                
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+        }
+        
+        function createNeuronHTML(index) {
+            const neuron = state.neurons[index];
+            
+            return `
+                <div class="step-content ${index === state.activeNeuron ? 'active' : ''}" id="neuron-content-${index}">
+                    <div class="step-header">
+                        <span class="step-title">Neuron ${index + 1}</span>
+                        <button class="btn-danger" onclick="removeNeuron(${index})">Remove</button>
+                    </div>
+                    <div class="step-controls">
+                        <div class="control-row">
+                            <div class="control-item">
+                                <label>w₁ <input type="number" class="param-input" step="0.1" value="${neuron.w[0]}" 
+                                       onchange="updateNeuronParamDirect(${index}, 'w', 0, this.value)"
+                                       id="w-input-${index}-0"></label>
+                                <input type="range" min="-1" max="1" step="0.1" value="${neuron.w[0]}" 
+                                       oninput="updateNeuronParam(${index}, 'w', 0, this.value)">
+                            </div>
+                            <div class="control-item">
+                                <label>w₂ <input type="number" class="param-input" step="0.1" value="${neuron.w[1]}" 
+                                       onchange="updateNeuronParamDirect(${index}, 'w', 1, this.value)"
+                                       id="w-input-${index}-1"></label>
+                                <input type="range" min="-1" max="1" step="0.1" value="${neuron.w[1]}" 
+                                       oninput="updateNeuronParam(${index}, 'w', 1, this.value)">
+                            </div>
+                        </div>
+                        <div class="control-row">
+                            <div class="control-item">
+                                <label>a₁ <input type="number" class="param-input" step="0.1" value="${neuron.a[0]}" 
+                                       onchange="updateNeuronParamDirect(${index}, 'a', 0, this.value)"
+                                       id="a-input-${index}-0"></label>
+                                <input type="range" min="-1" max="1" step="0.1" value="${neuron.a[0]}" 
+                                       oninput="updateNeuronParam(${index}, 'a', 0, this.value)">
+                            </div>
+                            <div class="control-item">
+                                <label>a₂ <input type="number" class="param-input" step="0.1" value="${neuron.a[1]}" 
+                                       onchange="updateNeuronParamDirect(${index}, 'a', 1, this.value)"
+                                       id="a-input-${index}-1"></label>
+                                <input type="range" min="-1" max="1" step="0.1" value="${neuron.a[1]}" 
+                                       oninput="updateNeuronParam(${index}, 'a', 1, this.value)">
+                            </div>
+                        </div>
+                        <div class="control-row">
+                            <div class="control-item">
+                                <label>bᵢ <input type="number" class="param-input" step="0.1" value="${neuron.b}" 
+                                       onchange="updateNeuronParamDirect(${index}, 'b', null, this.value)"
+                                       id="b-input-${index}"></label>
+                                <input type="range" min="-2" max="2" step="0.1" value="${neuron.b}" 
+                                       oninput="updateNeuronParam(${index}, 'b', null, this.value)" 
+                                       id="b-slider-${index}">
+                            </div>
+                            <div class="control-item">
+                                <label>cᵢ <input type="number" class="param-input" step="0.1" value="${neuron.c}" 
+                                       onchange="updateNeuronParamDirect(${index}, 'c', null, this.value)"
+                                       id="c-input-${index}"></label>
+                                <input type="range" min="-2" max="2" step="0.1" value="${neuron.c}" 
+                                       oninput="updateNeuronParam(${index}, 'c', null, this.value)" 
+                                       id="c-slider-${index}">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        function selectNeuron(index) {
+            state.activeNeuron = index;
+            document.querySelectorAll('.step-tab').forEach((tab, i) => {
+                tab.classList.toggle('active', i === index);
+            });
+            document.querySelectorAll('.step-content').forEach((content, i) => {
+                content.classList.toggle('active', i === index);
+            });
+            draw();
+        }
+        
+        function renderNeurons() {
+            const container = document.getElementById('neuronsContainer');
+            
+            let tabsHTML = '<div class="step-tabs">';
+            for (let i = 0; i < state.neurons.length; i++) {
+                tabsHTML += `<button class="step-tab ${i === state.activeNeuron ? 'active' : ''}" onclick="selectNeuron(${i})">Neuron ${i + 1}</button>`;
+            }
+            tabsHTML += '</div>';
+            
+            const contentsHTML = '<div class="step-container">' + state.neurons.map((_, i) => createNeuronHTML(i)).join('') + '</div>';
+            
+            container.innerHTML = tabsHTML + contentsHTML;
+            
+            // Actualizar contador de neuronas
+            const countElem = document.getElementById('neuronCount');
+            if (countElem) countElem.textContent = state.neurons.length;
+        }
+        
+        function addNeuron() {
+            const rand = (min, max) => Math.round((Math.random() * (max - min) + min) * 10) / 10;
+            
+            // Generar vectores canónicos aleatorios
+            const canonicalVectors = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+            const randomW = canonicalVectors[Math.floor(Math.random() * 4)];
+            const randomA = canonicalVectors[Math.floor(Math.random() * 4)];
+            
+            state.neurons.push({
+                w: [randomW[0], randomW[1]],
+                a: [randomA[0], randomA[1]],
+                b: rand(-2, 2),
+                c: rand(-2, 2)
+            });
+            state.numNeurons = state.neurons.length;
+            renderNeurons();
+            draw();
+        }
+        
+        function removeNeuron(index) {
+            if (state.neurons.length > 1) {
+                state.neurons.splice(index, 1);
+                state.numNeurons = state.neurons.length;
+                if (state.activeNeuron >= state.neurons.length) {
+                    state.activeNeuron = state.neurons.length - 1;
+                }
+                renderNeurons();
+                draw();
+            }
+        }
+        
+        function updateNeuronParam(neuronIndex, param, subIndex, value) {
+            const numValue = parseFloat(value);
+            if (param === 'w' || param === 'a') {
+                state.neurons[neuronIndex][param][subIndex] = numValue;
+                const inputField = document.getElementById(`${param}-input-${neuronIndex}-${subIndex}`);
+                if (inputField) inputField.value = numValue;
+            } else {
+                state.neurons[neuronIndex][param] = numValue;
+                const inputField = document.getElementById(`${param}-input-${neuronIndex}`);
+                if (inputField) inputField.value = numValue;
+            }
+            draw();
+        }
+        
+        function updateNeuronParamDirect(neuronIndex, param, subIndex, value) {
+            const numValue = parseFloat(value);
+            if (isNaN(numValue)) return;
+            
+            if (param === 'w' || param === 'a') {
+                state.neurons[neuronIndex][param][subIndex] = numValue;
+            } else {
+                state.neurons[neuronIndex][param] = numValue;
+            }
+            draw();
+        }
+        
+        function updateGlobalTime() {
+            state.globalTime = parseFloat(document.getElementById('globalTime').value);
+            document.getElementById('globalTimeValue').textContent = state.globalTime.toFixed(2) + 's';
+            draw();
+        }
+        
+        function updatePointSize() {
+            state.pointSize = parseInt(document.getElementById('pointSize').value);
+            document.getElementById('pointSizeValue').textContent = state.pointSize;
+            draw();
+        }
+        
+        function updateVectorDensity() {
+            state.vectorDensity = parseInt(document.getElementById('vectorDensity').value);
+            document.getElementById('vectorDensityValue').textContent = state.vectorDensity;
+            draw();
+        }
+        
+        function updateVectorOpacity() {
+            state.vectorOpacity = parseFloat(document.getElementById('vectorOpacity').value);
+            document.getElementById('vectorOpacityValue').textContent = state.vectorOpacity.toFixed(2);
+            draw();
+        }
+        
+        function togglePlay() {
+            state.isPlaying = !state.isPlaying;
+            document.getElementById('playBtn').textContent = state.isPlaying ? '⏸ Pause' : '▶ Play';
+            if (state.isPlaying) animate();
+        }
+        
+        function reset() {
+            state.globalTime = 0;
+            state.isPlaying = false;
+            document.getElementById('globalTime').value = 0;
+            document.getElementById('globalTimeValue').textContent = '0.00s';
+            document.getElementById('playBtn').textContent = '▶ Play';
+            updateTimelineCursor();
+            draw();
+        }
+        
+        function animate() {
+            if (!state.isPlaying) return;
+            
+            state.globalTime += 0.016; // Aproximadamente 60 fps
+            if (state.globalTime >= 10) { // Máximo 10 segundos
+                state.globalTime = 10;
+                state.isPlaying = false;
+                document.getElementById('playBtn').textContent = '▶ Play';
+            }
+            
+            document.getElementById('globalTime').value = state.globalTime;
+            document.getElementById('globalTimeValue').textContent = state.globalTime.toFixed(2) + 's';
+            draw();
+            
+            if (state.isPlaying) requestAnimationFrame(animate);
+        }
+        
+        function toggleVisualization() {
+            state.showHyperplane = !state.showHyperplane;
+            state.showVectorField = !state.showVectorField;
+            const btn = document.getElementById('toggleVisBtn');
+            btn.textContent = (state.showHyperplane && state.showVectorField) ? '👁 Hide Overlays' : '👁 Show Overlays';
+            btn.classList.toggle('active', state.showHyperplane && state.showVectorField);
+            draw();
+        }
+        
+        function saveImage() {
+            const filename = prompt('Enter filename:', `neural_ode_${Date.now()}.png`);
+            if (filename) {
+                canvas.toBlob(blob => {
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = filename.endsWith('.png') ? filename : filename + '.png';
+                    a.click();
+                    URL.revokeObjectURL(url);
+                });
+            }
+        }
+        
+        function toggleRecording() {
+            if (state.isRecording) {
+                stopRecording();
+            } else {
+                startRecording();
+            }
+        }
+        
+        function startRecording() {
+            alert('Note: Video will be saved as WebM format.\n\nTo convert to MP4:\n• Use FFmpeg: ffmpeg -i video.webm video.mp4\n• Or use online converters like CloudConvert\n• Or use VLC Media Player');
+            
+            state.globalTime = 0;
+            document.getElementById('globalTime').value = 0;
+            document.getElementById('globalTimeValue').textContent = '0.00s';
+            draw();
+            
+            const stream = canvas.captureStream(60);
+            const options = {
+                mimeType: 'video/webm;codecs=vp9',
+                videoBitsPerSecond: 10000000
+            };
+            
+            try {
+                state.mediaRecorder = new MediaRecorder(stream, options);
+            } catch (e) {
+                try {
+                    const fallbackOptions = {
+                        mimeType: 'video/webm',
+                        videoBitsPerSecond: 10000000
+                    };
+                    state.mediaRecorder = new MediaRecorder(stream, fallbackOptions);
+                } catch (e2) {
+                    state.mediaRecorder = new MediaRecorder(stream);
+                }
+            }
+            
+            state.recordedChunks = [];
+            
+            state.mediaRecorder.ondataavailable = function(event) {
+                if (event.data.size > 0) {
+                    state.recordedChunks.push(event.data);
+                }
+            };
+            
+            state.mediaRecorder.onstop = function() {
+                const blob = new Blob(state.recordedChunks, { type: 'video/webm' });
+                const filename = prompt('Enter filename for video:', `neural_ode_${Date.now()}.webm`);
+                
+                if (filename) {
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = filename.endsWith('.webm') ? filename : filename + '.webm';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                }
+                
+                const btn = document.getElementById('recordBtn');
+                btn.textContent = '🎥 Record Video';
+                btn.classList.remove('recording');
+                state.isRecording = false;
+            };
+            
+            state.mediaRecorder.start();
+            state.isRecording = true;
+            
+            const btn = document.getElementById('recordBtn');
+            btn.textContent = '⏹ Stop Recording';
+            btn.classList.add('recording');
+            
+            state.isPlaying = true;
+            document.getElementById('playBtn').textContent = '⏸ Pause';
+            animateRecording();
+        }
+        
+        function animateRecording() {
+            if (state.isRecording && state.isPlaying) {
+                state.globalTime += 0.016;
+                
+                if (state.globalTime >= 10) { // Máximo 10 segundos
+                    state.globalTime = 10;
+                    draw();
+                    setTimeout(() => {
+                        stopRecording();
+                    }, 100);
+                } else {
+                    document.getElementById('globalTime').value = state.globalTime;
+                    document.getElementById('globalTimeValue').textContent = state.globalTime.toFixed(2) + 's';
+                    draw();
+                    
+                    requestAnimationFrame(animateRecording);
+                }
+            }
+        }
+        
+        function stopRecording() {
+            if (state.mediaRecorder && state.isRecording) {
+                state.mediaRecorder.stop();
+                state.isPlaying = false;
+                document.getElementById('playBtn').textContent = '▶ Play';
+            }
+        }
+        
+        function toggleFullscreen() {
+            const container = document.querySelector('.canvas-container');
+            
+            if (!document.fullscreenElement) {
+                container.requestFullscreen().catch(err => {
+                    alert(`Error attempting to enable fullscreen: ${err.message}`);
+                });
+            } else {
+                document.exitFullscreen();
+            }
+        }
+        
+        document.addEventListener('fullscreenchange', () => {
+            const btn = document.getElementById('fullscreenBtn');
+            const controls = document.getElementById('fullscreenControls');
+            
+            if (document.fullscreenElement) {
+                btn.textContent = '⛶ Exit Fullscreen';
+                controls.classList.add('active');
+            } else {
+                btn.textContent = '⛶ Fullscreen';
+                controls.classList.remove('active');
+            }
+        });
+        
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape' && document.fullscreenElement) {
+                document.exitFullscreen();
+            }
+        });
+        
+        canvas.addEventListener('wheel', e => {
+            e.preventDefault();
+            const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+            state.zoom = Math.max(0.1, Math.min(10, state.zoom * zoomFactor));
+            draw();
+        });
+        
+        canvas.addEventListener('mousedown', e => {
+            const rect = canvas.getBoundingClientRect();
+            state.lastMouseX = e.clientX - rect.left;
+            state.lastMouseY = e.clientY - rect.top;
+            state.mouseDown = true;
+            
+            if (e.shiftKey) {
+                // Convertir coordenadas del canvas a coordenadas del mundo
+                const scale = 600 * state.zoom;
+                const centerX = canvas.width / 2;
+                const centerY = canvas.height / 2;
+                const worldX = (state.lastMouseX - centerX) / scale - state.panX;
+                const worldY = -(state.lastMouseY - centerY) / scale - state.panY;
+                
+                // Buscar si hay un punto cerca
+                const threshold = 15 / scale; // Radio de captura en coordenadas del mundo
+                for (let i = 0; i < state.particles.length; i++) {
+                    const p = state.particles[i];
+                    const dx = p.x - worldX;
+                    const dy = p.y - worldY;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    
+                    if (dist < threshold) {
+                        state.draggedParticleIndex = i;
+                        state.isPanning = false;
+                        state.isSettingB = false;
+                        return;
+                    }
+                }
+                
+                // Si no se encontró un punto cerca, modo de ajustar hiperplano
+                state.isSettingB = true;
+                state.isPanning = false;
+                state.draggedParticleIndex = -1;
+            } else {
+                state.isPanning = true;
+                state.isSettingB = false;
+                state.draggedParticleIndex = -1;
+            }
+        });
+        
+        canvas.addEventListener('mousemove', e => {
+            if (!state.mouseDown) return;
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            if (state.draggedParticleIndex >= 0) {
+                // Arrastrar punto
+                const scale = 600 * state.zoom;
+                const centerX = canvas.width / 2;
+                const centerY = canvas.height / 2;
+                const worldX = (x - centerX) / scale - state.panX;
+                const worldY = -(y - centerY) / scale - state.panY;
+                
+                state.particles[state.draggedParticleIndex].x = worldX;
+                state.particles[state.draggedParticleIndex].y = worldY;
+                
+                draw();
+            } else if (state.isPanning) {
+                const dx = x - state.lastMouseX;
+                const dy = y - state.lastMouseY;
+                
+                const scale = 600 * state.zoom;
+                state.panX += dx / scale;
+                state.panY -= dy / scale;
+                
+                state.lastMouseX = x;
+                state.lastMouseY = y;
+                draw();
+            }
+        });
+        
+        canvas.addEventListener('mouseup', () => {
+            state.mouseDown = false;
+            state.isPanning = false;
+            state.isSettingB = false;
+            state.draggedParticleIndex = -1;
+        });
+        
+        canvas.addEventListener('mouseleave', () => {
+            state.mouseDown = false;
+            state.isPanning = false;
+            state.isSettingB = false;
+            state.draggedParticleIndex = -1;
+        });
+        
+        resample();
+        renderNeurons();
+        draw();
+    </script>
+</body>
+</html>
